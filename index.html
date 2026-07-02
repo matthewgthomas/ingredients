@@ -45,7 +45,9 @@
 
       <footer id="side-footer">
         <button id="reset-view" class="link-btn">Show all origins</button>
-        <p class="disclaimer">Origins are approximate and some are debated; production figures are indicative. Built for exploration, not citation.</p>
+        <p class="disclaimer">Origins are approximate and some are debated; production figures are indicative.
+          <button id="about-open" class="link-btn inline">About the data &amp; sources</button>
+        </p>
       </footer>
     </aside>
 
@@ -67,13 +69,50 @@
           <h3><span class="dot producer-dot"></span> Main growers today</h3>
           <ul id="detail-producers" class="producer-list"></ul>
         </div>
+        <div class="detail-section detail-sources">
+          <h3>Sources</h3>
+          <ul id="detail-sources" class="source-list"></ul>
+        </div>
       </div>
 
       <button id="mobile-list-toggle" aria-label="Browse ingredients">☰ Ingredients</button>
     </main>
+
+    <!-- About / sources modal -->
+    <div id="about-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="about-title">
+      <div class="modal-backdrop"></div>
+      <div class="modal-card">
+        <button id="about-close" aria-label="Close">&times;</button>
+        <h2 id="about-title">About the data &amp; sources</h2>
+        <p>
+          This atlas pairs each ingredient's <strong>origin</strong> — where its source
+          organism was domesticated, or where a prepared food was first made — with the
+          <strong>main regions that grow or produce it today</strong>.
+        </p>
+        <p>
+          Origins and their coordinates are synthesised from crop- and animal-domestication
+          research and general reference works. Many crops were domesticated gradually and
+          sometimes in more than one place, so origins are approximate and a few are actively
+          debated. Present-day production reflects <strong>FAO</strong> data and is indicative
+          of the leading producers rather than an exact ranking.
+        </p>
+        <p>
+          Each ingredient links to its <strong>Wikipedia</strong> article — a starting point
+          whose own references trace back to primary sources — and to the relevant
+          <strong>FAO</strong> production dataset.
+        </p>
+        <h3>Backbone references</h3>
+        <ul id="about-refs" class="source-list"></ul>
+        <p class="disclaimer">
+          Built for curiosity and exploration, not for citation. Coordinates are chosen to
+          convey region, not a precise point.
+        </p>
+      </div>
+    </div>
   </div>
 
   <script src="data/ingredients.js"></script>
+  <script src="data/sources.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

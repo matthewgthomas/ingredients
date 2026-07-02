@@ -3,6 +3,8 @@
   "use strict";
 
   var DATA = window.INGREDIENTS || [];
+  var SOURCES = window.SOURCES || { wiki: {}, aquatic: [], production: {}, references: [] };
+  var AQUATIC = new Set(SOURCES.aquatic || []);
 
   // Flavour-family colours (categories from the "type" column).
   var CATEGORY_COLORS = {
@@ -243,7 +245,37 @@
         '<span>' + p.place + "</span>";
       ul.appendChild(li);
     });
+
+    renderSources(d);
     detailEl.classList.remove("hidden");
+  }
+
+  // Build the per-ingredient Sources list: origin/history + production data.
+  function renderSources(d) {
+    var ul = document.getElementById("detail-sources");
+    ul.innerHTML = "";
+    var links = [];
+
+    var wiki = SOURCES.wiki && SOURCES.wiki[d.id];
+    if (wiki) {
+      links.push({ tag: "Origin & history", label: "Wikipedia", url: wiki });
+    }
+    var prod = AQUATIC.has(d.id) ? SOURCES.production.sea : SOURCES.production.land;
+    if (prod) {
+      links.push({ tag: "Production", label: prod.label, url: prod.url });
+    }
+
+    links.forEach(function (s) {
+      var li = document.createElement("li");
+      var a = document.createElement("a");
+      a.href = s.url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = s.label;
+      li.innerHTML = '<span class="src-tag">' + s.tag + "</span> ";
+      li.appendChild(a);
+      ul.appendChild(li);
+    });
   }
   function hideDetail() { detailEl.classList.add("hidden"); }
   document.getElementById("detail-close").addEventListener("click", function () {
@@ -376,6 +408,31 @@
   // ---------- Reset ----------
   document.getElementById("reset-view").addEventListener("click", clearSelection);
 
+  // ---------- About / sources modal ----------
+  var aboutModal = document.getElementById("about-modal");
+  function renderRefs() {
+    var ul = document.getElementById("about-refs");
+    ul.innerHTML = "";
+    (SOURCES.references || []).forEach(function (r) {
+      var li = document.createElement("li");
+      var a = document.createElement("a");
+      a.href = r.url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = r.label;
+      li.appendChild(a);
+      ul.appendChild(li);
+    });
+  }
+  function openAbout() { aboutModal.classList.remove("hidden"); }
+  function closeAbout() { aboutModal.classList.add("hidden"); }
+  document.getElementById("about-open").addEventListener("click", openAbout);
+  document.getElementById("about-close").addEventListener("click", closeAbout);
+  aboutModal.querySelector(".modal-backdrop").addEventListener("click", closeAbout);
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") closeAbout();
+  });
+
   // ---------- Mobile sidebar ----------
   var sidebar = document.getElementById("sidebar");
   document.getElementById("mobile-list-toggle").addEventListener("click", function () {
@@ -386,5 +443,6 @@
   // ---------- Init ----------
   renderChips();
   renderList();
+  renderRefs();
   renderOverview();
 })();
