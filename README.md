@@ -13,8 +13,17 @@ or both.
 
 ## Use it
 
-Open `index.html` in a browser. Everything is static — no build step and no server-side
-code — so it runs directly from a file or any static host.
+Everything is static — no build step and no server-side code. Serve the project from
+any static host, or preview it locally:
+
+```bash
+python3 -m http.server 8000
+```
+
+Then open `http://localhost:8000`. Use an HTTP server rather than opening `index.html`
+directly so tile requests include the browser's HTTP Referer header, as required by
+the [OpenStreetMap tile usage policy](https://operations.osmfoundation.org/policies/tiles/).
+Map tiles need an internet connection; no API key is required.
 
 * **Browse** the list on the left, grouped by flavour family.
 * **Click** an ingredient (in the list or on the map) to see its origin and main growers.
@@ -111,5 +120,5 @@ sources are the place to verify and dig deeper.
 
 ## Credits
 
-Map tiles © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors and
-© [CARTO](https://carto.com/attributions). Built with [Leaflet](https://leafletjs.com/).
+Map tiles © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors.
+Built with [Leaflet](https://leafletjs.com/).
