@@ -42,12 +42,28 @@
     search: ""
   };
 
+  var mobileQuery = window.matchMedia("(max-width: 900px), (max-width: 1100px) and (max-height: 500px)");
+  var landscapeQuery = window.matchMedia("(min-width: 480px) and (max-width: 1100px) and (max-height: 500px)");
+  var appEl = document.getElementById("app");
+  var sidebar = document.getElementById("sidebar");
+  var toolbar = document.getElementById("mobile-toolbar");
+  var exploreControls = document.getElementById("explore-controls");
+  var browseToggle = document.getElementById("mobile-list-toggle");
+  var browseBackdrop = document.getElementById("mobile-panel-backdrop");
+  var detailEl = document.getElementById("detail");
+  var detailExpand = document.getElementById("detail-expand");
+  var aboutModal = document.getElementById("about-modal");
+  var viewPoints = [];
+  var viewMaxZoom = 4;
+  var fitFrame = null;
+
   // ---------- Map ----------
   var map = L.map("map", {
     center: [25, 12],
     zoom: 2,
-    minZoom: 2,
+    minZoom: 0,
     maxZoom: 7,
+    zoomSnap: 0.25,
     worldCopyJump: true,
     zoomControl: true,
     attributionControl: true,
@@ -78,8 +94,8 @@
     return L.divIcon({
       className: "origin-star",
       html: html,
-      iconSize: [s, s],
-      iconAnchor: [s / 2, s / 2]
+      iconSize: [44, 44],
+      iconAnchor: [22, 22]
     });
   }
 
@@ -106,13 +122,86 @@
     return { pts: pts, destLng: x2 };
   }
 
-  // Padding for fitBounds that keeps markers clear of the detail card
-  // (right side on desktop, bottom on mobile).
+  // Measure overlays rather than assuming a fixed card height. The toolbar
+  // occupies its own layout row, so these coordinates are local to the map.
   function fitPadding() {
-    if (window.innerWidth <= 780) {
-      return { paddingTopLeft: [40, 60], paddingBottomRight: [40, 320] };
+    var mapRect = document.getElementById("map").getBoundingClientRect();
+    var right = 24;
+    var bottom = 24;
+    if (!detailEl.classList.contains("hidden")) {
+      var card = detailEl.getBoundingClientRect();
+      if (mobileQuery.matches && !landscapeQuery.matches) {
+        bottom = mapRect.bottom - card.top + 16;
+      } else {
+        right = mapRect.right - card.left + 16;
+      }
+    } else if (mobileQuery.matches) {
+      bottom = mapRect.bottom - browseToggle.getBoundingClientRect().top + 12;
     }
-    return { paddingTopLeft: [60, 60], paddingBottomRight: [360, 60] };
+    return {
+      paddingTopLeft: [56, 24],
+      paddingBottomRight: [Math.max(24, right), Math.max(24, bottom)]
+    };
+  }
+
+  function fitMapView() {
+    if (!viewPoints.length || (mobileQuery.matches && sidebar.classList.contains("open"))) return;
+    var pad = fitPadding();
+    map.stop();
+    map.fitBounds(viewPoints, {
+      paddingTopLeft: pad.paddingTopLeft,
+      paddingBottomRight: pad.paddingBottomRight,
+      maxZoom: viewMaxZoom,
+      animate: false
+    });
+  }
+
+  function scheduleMapFit() {
+    if (fitFrame !== null) return;
+    fitFrame = window.requestAnimationFrame(function () {
+      fitFrame = null;
+      map.invalidateSize({ pan: false });
+      fitMapView();
+    });
+  }
+
+  // Invisible 44px targets keep the dots legible while making touch reliable.
+  // Overlapping origins open a chooser instead of selecting an arbitrary dot.
+  function chooseOrigin(d, event) {
+    var point = event.containerPoint || map.latLngToContainerPoint([d.origin.lat, d.origin.lng]);
+    var nearby = visibleItems().filter(function (item) {
+      var position = map.latLngToContainerPoint([item.origin.lat, item.origin.lng]);
+      return position.distanceTo(point) <= 28;
+    });
+    if (nearby.length < 2) {
+      selectIngredient(nearby.length ? nearby[0].id : d.id);
+      return;
+    }
+    var choices = document.createElement("div");
+    choices.className = "map-choices";
+    var prompt = document.createElement("p");
+    prompt.textContent = "Ingredients near this point";
+    choices.appendChild(prompt);
+    nearby.sort(function (a, b) { return a.id.localeCompare(b.id); }).forEach(function (item) {
+      var button = document.createElement("button");
+      button.className = "map-choice";
+      button.textContent = item.id;
+      button.addEventListener("click", function () { selectIngredient(item.id); });
+      choices.appendChild(button);
+    });
+    var pad = fitPadding();
+    L.popup({
+      maxWidth: Math.min(280, window.innerWidth - 64),
+      autoPanPaddingTopLeft: pad.paddingTopLeft,
+      autoPanPaddingBottomRight: pad.paddingBottomRight
+    }).setLatLng(event.latlng || [d.origin.lat, d.origin.lng]).setContent(choices).openOn(map);
+  }
+
+  function addTouchTarget(position, onClick) {
+    return L.circleMarker(position, {
+      radius: 22, weight: 0, opacity: 0, fillOpacity: 0,
+      className: "marker-hit-area", bubblingMouseEvents: false
+    }).on("click", onClick).addTo(layer);
   }
 
   // ---------- Rendering the map for a selection / overview ----------
@@ -129,28 +218,27 @@
         fillColor: c,
         color: "#fff",
         weight: 1.4,
-        fillOpacity: 0.9
+        fillOpacity: 0.9,
+        className: "overview-marker",
+        bubblingMouseEvents: false
       });
       m.bindTooltip(d.id, { direction: "top", offset: [0, -4] });
-      m.on("click", function () { selectIngredient(d.id); });
+      var onClick = function (event) { chooseOrigin(d, event); };
+      m.on("click", onClick);
       m.addTo(layer);
+      addTouchTarget([d.origin.lat, d.origin.lng], onClick)
+        .bindTooltip(d.id, { direction: "top", offset: [0, -8] });
       bounds.push([d.origin.lat, d.origin.lng]);
     });
-    if (bounds.length) {
-      var pad = fitPadding();
-      map.fitBounds(bounds, {
-        paddingTopLeft: pad.paddingTopLeft,
-        paddingBottomRight: pad.paddingBottomRight,
-        maxZoom: 4,
-        animate: true
-      });
-    }
+    viewPoints = bounds;
+    viewMaxZoom = 4;
+    scheduleMapFit();
   }
 
   function renderSelection(d) {
     clearLayer();
     var c = catColor(d.type);
-    var pts = [[d.origin.lat, d.origin.lng]];
+    var pts = state.mode === "producers" ? [] : [[d.origin.lat, d.origin.lng]];
 
     // Arcs + producers
     if (state.mode === "both" || state.mode === "producers") {
@@ -170,13 +258,17 @@
           fillColor: c,
           color: "#fff",
           weight: 2,
-          fillOpacity: 0.92
+          fillOpacity: 0.92,
+          className: "grower-marker"
         });
         pm.bindTooltip(
           '<strong>' + p.place + '</strong><br>grows / produces ' + d.id,
           { direction: "top", offset: [0, -5] }
         );
         pm.addTo(layer);
+        addTouchTarget([p.lat, arc.destLng], function () { pm.openTooltip(); })
+          .bindTooltip('<strong>' + p.place + '</strong><br>grows / produces ' + d.id,
+            { direction: "top", offset: [0, -8] });
         pts.push([p.lat, arc.destLng]);
       });
     }
@@ -185,7 +277,9 @@
     if (state.mode === "both" || state.mode === "origin") {
       L.marker([d.origin.lat, d.origin.lng], {
         icon: starIcon(c, 32),
-        zIndexOffset: 1000
+        zIndexOffset: 1000,
+        title: "Origin of " + d.id,
+        alt: "Origin: " + d.origin.place
       })
         .bindTooltip(
           '<strong>Origin</strong><br>' + d.origin.place,
@@ -194,28 +288,23 @@
         .addTo(layer);
     }
 
-    if (state.mode === "origin") {
-      map.setView([d.origin.lat, d.origin.lng], 4, { animate: true });
-    } else if (pts.length) {
-      var pad = fitPadding();
-      map.fitBounds(pts, {
-        paddingTopLeft: pad.paddingTopLeft,
-        paddingBottomRight: pad.paddingBottomRight,
-        maxZoom: 5,
-        animate: true
-      });
-    }
+    viewPoints = pts;
+    viewMaxZoom = state.mode === "origin" ? 4 : 5;
+    scheduleMapFit();
   }
 
   // ---------- Selection ----------
   function selectIngredient(id) {
-    state.selected = id;
     var d = byId(id);
     if (!d) return;
-    renderSelection(d);
+    state.selected = id;
+    map.closePopup();
     showDetail(d);
     highlightListItem(id);
-    closeMobileSidebar();
+    searchInput.blur();
+    closeMobileSidebar(false);
+    renderSelection(d);
+    if (mobileQuery.matches) document.getElementById("detail-name").focus({ preventScroll: true });
   }
 
   function clearSelection() {
@@ -226,7 +315,6 @@
   }
 
   // ---------- Detail card ----------
-  var detailEl = document.getElementById("detail");
   function showDetail(d) {
     var c = catColor(d.type);
     document.getElementById("detail-name").textContent = d.id;
@@ -247,6 +335,8 @@
     });
 
     renderSources(d);
+    setDetailExpanded(false);
+    document.getElementById("detail-body").scrollTop = 0;
     detailEl.classList.remove("hidden");
   }
 
@@ -278,8 +368,18 @@
     });
   }
   function hideDetail() { detailEl.classList.add("hidden"); }
+  function setDetailExpanded(expanded) {
+    detailEl.classList.toggle("expanded", expanded);
+    detailExpand.setAttribute("aria-expanded", String(expanded));
+    detailExpand.innerHTML = expanded ? 'Show less <span aria-hidden="true">↓</span>' : 'Story, growers &amp; sources <span aria-hidden="true">↑</span>';
+    scheduleMapFit();
+  }
+  detailExpand.addEventListener("click", function () {
+    setDetailExpanded(!detailEl.classList.contains("expanded"));
+  });
   document.getElementById("detail-close").addEventListener("click", function () {
     clearSelection();
+    if (mobileQuery.matches) browseToggle.focus({ preventScroll: true });
   });
 
   // ---------- Helpers ----------
@@ -299,10 +399,13 @@
   // ---------- Sidebar: category chips ----------
   var chipEl = document.getElementById("category-filter");
   function renderChips() {
+    var focusedCategory = document.activeElement && document.activeElement.getAttribute("data-category");
     chipEl.innerHTML = "";
     CATEGORY_ORDER.forEach(function (cat) {
       var chip = document.createElement("button");
       chip.className = "cat-chip" + (state.activeCats.has(cat) ? " active" : " dimmed");
+      chip.setAttribute("aria-pressed", String(state.activeCats.has(cat)));
+      chip.setAttribute("data-category", cat);
       chip.style.color = state.activeCats.has(cat) ? catColor(cat) : "";
       chip.innerHTML =
         '<span class="swatch" style="background:' + catColor(cat) + '"></span>' + cat;
@@ -325,7 +428,9 @@
         if (!state.selected) renderOverview();
       });
       chipEl.appendChild(chip);
+      if (cat === focusedCategory) chip.focus({ preventScroll: true });
     });
+    updateFilterLabel();
   }
 
   // ---------- Sidebar: ingredient list ----------
@@ -340,19 +445,20 @@
       });
       if (!items.length) return;
 
-      var group = document.createElement("div");
+      var group = document.createElement("section");
       group.className = "cat-group";
 
-      var h = document.createElement("div");
+      var h = document.createElement("h3");
       h.className = "cat-group-header";
       h.innerHTML =
         '<span class="swatch" style="background:' + catColor(cat) + '"></span>' + cat;
       group.appendChild(h);
 
       items.forEach(function (d) {
-        var row = document.createElement("div");
+        var row = document.createElement("button");
+        row.type = "button";
         row.className = "ing-item" + (state.selected === d.id ? " selected" : "");
-        row.setAttribute("role", "option");
+        row.setAttribute("aria-pressed", String(state.selected === d.id));
         row.innerHTML =
           '<span class="bullet" style="background:' + catColor(d.type) + '"></span>' + d.id;
         row.addEventListener("click", function () { selectIngredient(d.id); });
@@ -367,21 +473,35 @@
       empty.textContent = "No ingredients match.";
       listEl.appendChild(empty);
     }
+    var count = visibleItems().length;
+    document.getElementById("list-status").textContent = count + (count === 1 ? " ingredient" : " ingredients");
   }
 
   function highlightListItem(id) {
     var rows = listEl.querySelectorAll(".ing-item");
     rows.forEach(function (r) {
-      r.classList.toggle("selected", r.textContent.trim() === id);
+      var selected = r.textContent.trim() === id;
+      r.classList.toggle("selected", selected);
+      r.setAttribute("aria-pressed", String(selected));
     });
   }
 
   // ---------- Search ----------
   var searchInput = document.getElementById("search");
   var searchWrap = searchInput.parentElement;
+  searchInput.addEventListener("focus", function () {
+    if (mobileQuery.matches) {
+      setFiltersOpen(false);
+      openMobileSidebar(false);
+    }
+  });
   searchInput.addEventListener("input", function () {
     state.search = searchInput.value;
     searchWrap.classList.toggle("has-value", !!searchInput.value);
+    if (mobileQuery.matches) {
+      setFiltersOpen(false);
+      openMobileSidebar(false);
+    }
     renderList();
     if (!state.selected) renderOverview();
   });
@@ -398,18 +518,25 @@
   var modeButtons = document.querySelectorAll(".mode-toggle button");
   modeButtons.forEach(function (btn) {
     btn.addEventListener("click", function () {
-      modeButtons.forEach(function (b) { b.classList.remove("active"); });
+      modeButtons.forEach(function (b) {
+        b.classList.remove("active");
+        b.setAttribute("aria-pressed", "false");
+      });
       btn.classList.add("active");
+      btn.setAttribute("aria-pressed", "true");
       state.mode = btn.getAttribute("data-mode");
       if (state.selected) renderSelection(byId(state.selected));
     });
   });
 
   // ---------- Reset ----------
-  document.getElementById("reset-view").addEventListener("click", clearSelection);
+  document.getElementById("reset-view").addEventListener("click", function () {
+    clearSelection();
+    closeMobileSidebar();
+  });
 
   // ---------- About / sources modal ----------
-  var aboutModal = document.getElementById("about-modal");
+  var aboutReturnFocus = null;
   function renderRefs() {
     var ul = document.getElementById("about-refs");
     ul.innerHTML = "";
@@ -424,25 +551,148 @@
       ul.appendChild(li);
     });
   }
-  function openAbout() { aboutModal.classList.remove("hidden"); }
-  function closeAbout() { aboutModal.classList.add("hidden"); }
+  function openAbout() {
+    aboutReturnFocus = document.activeElement;
+    aboutModal.classList.remove("hidden");
+    sidebar.inert = true;
+    toolbar.inert = true;
+    document.getElementById("map-area").inert = true;
+    document.getElementById("about-close").focus();
+  }
+  function closeAbout() {
+    if (aboutModal.classList.contains("hidden")) return;
+    aboutModal.classList.add("hidden");
+    syncPanelAccessibility();
+    if (aboutReturnFocus && !aboutReturnFocus.closest("[inert]")) aboutReturnFocus.focus({ preventScroll: true });
+  }
   document.getElementById("about-open").addEventListener("click", openAbout);
   document.getElementById("about-close").addEventListener("click", closeAbout);
   aboutModal.querySelector(".modal-backdrop").addEventListener("click", closeAbout);
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape") closeAbout();
+    if (!aboutModal.classList.contains("hidden")) {
+      if (e.key === "Escape") closeAbout();
+      if (e.key === "Tab") {
+        var focusable = aboutModal.querySelectorAll("button, a[href]");
+        var first = focusable[0], last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+      return;
+    }
+    if (e.key !== "Escape") return;
+    if (mobileQuery.matches && sidebar.classList.contains("filters-open")) {
+      setFiltersOpen(false);
+      document.getElementById("filter-toggle").focus();
+    } else if (mobileQuery.matches && sidebar.classList.contains("open")) {
+      closeMobileSidebar();
+    } else if (mobileQuery.matches && detailEl.classList.contains("expanded")) {
+      setDetailExpanded(false);
+      detailExpand.focus();
+    } else if (state.selected) {
+      clearSelection();
+      if (mobileQuery.matches) browseToggle.focus();
+    }
   });
 
-  // ---------- Mobile sidebar ----------
-  var sidebar = document.getElementById("sidebar");
-  document.getElementById("mobile-list-toggle").addEventListener("click", function () {
-    sidebar.classList.toggle("open");
+  // ---------- Mobile panels and viewport ----------
+  function updateFilterLabel() {
+    var expanded = sidebar.classList.contains("filters-open");
+    var label = expanded ? "Done" : "Filters";
+    if (!expanded && state.activeCats.size < CATEGORY_ORDER.length) label += " (" + state.activeCats.size + ")";
+    document.getElementById("filter-toggle").textContent = label;
+    document.getElementById("filter-toggle").setAttribute("aria-expanded", String(expanded));
+  }
+  function setFiltersOpen(open) {
+    sidebar.classList.toggle("filters-open", open);
+    updateFilterLabel();
+  }
+  document.getElementById("filter-toggle").addEventListener("click", function () {
+    setFiltersOpen(!sidebar.classList.contains("filters-open"));
   });
-  function closeMobileSidebar() { sidebar.classList.remove("open"); }
+  document.getElementById("clear-filters").addEventListener("click", function () {
+    state.activeCats = new Set(CATEGORY_ORDER);
+    renderChips();
+    renderList();
+    if (!state.selected) renderOverview();
+  });
+  function syncPanelAccessibility() {
+    var aboutOpen = !aboutModal.classList.contains("hidden");
+    var browseOpen = mobileQuery.matches && sidebar.classList.contains("open");
+    sidebar.inert = aboutOpen || (mobileQuery.matches && !browseOpen);
+    toolbar.inert = aboutOpen;
+    document.getElementById("map-area").inert = aboutOpen;
+    browseToggle.setAttribute("aria-expanded", String(browseOpen));
+    browseBackdrop.hidden = !browseOpen;
+    appEl.classList.toggle("browsing", browseOpen);
+  }
+  function openMobileSidebar(focusClose) {
+    if (!mobileQuery.matches) return;
+    map.closePopup();
+    sidebar.classList.add("open");
+    syncPanelAccessibility();
+    if (focusClose !== false) document.getElementById("sidebar-close").focus({ preventScroll: true });
+  }
+  function closeMobileSidebar(restoreFocus) {
+    var wasOpen = sidebar.classList.contains("open");
+    sidebar.classList.remove("open");
+    setFiltersOpen(false);
+    syncPanelAccessibility();
+    if (mobileQuery.matches && wasOpen && restoreFocus !== false) {
+      searchInput.blur();
+      browseToggle.focus({ preventScroll: true });
+    }
+    scheduleMapFit();
+  }
+  browseToggle.addEventListener("click", function () {
+    if (sidebar.classList.contains("open")) closeMobileSidebar();
+    else openMobileSidebar();
+  });
+  document.getElementById("sidebar-close").addEventListener("click", closeMobileSidebar);
+  browseBackdrop.addEventListener("click", closeMobileSidebar);
+
+  function updateViewport() {
+    var viewport = window.visualViewport;
+    // Browser zoom should magnify the page, not resize it into the zoomed area.
+    if (!viewport || viewport.scale === 1) {
+      var height = viewport ? viewport.height : window.innerHeight;
+      appEl.style.setProperty("--viewport-height", height + "px");
+      appEl.style.setProperty("--viewport-top", (viewport ? viewport.offsetTop : 0) + "px");
+      appEl.classList.toggle("compact-height", mobileQuery.matches && window.innerWidth < 480 && height <= 440);
+    }
+    appEl.style.setProperty("--toolbar-height", toolbar.getBoundingClientRect().height + "px");
+    scheduleMapFit();
+  }
+  function syncResponsiveLayout() {
+    if (mobileQuery.matches) {
+      toolbar.appendChild(exploreControls);
+    } else {
+      sidebar.insertBefore(exploreControls, document.getElementById("browse-heading"));
+      sidebar.classList.remove("open");
+      setFiltersOpen(false);
+    }
+    syncPanelAccessibility();
+    updateViewport();
+  }
+  mobileQuery.addEventListener("change", syncResponsiveLayout);
+  landscapeQuery.addEventListener("change", updateViewport);
+  window.addEventListener("resize", updateViewport);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", updateViewport);
+    window.visualViewport.addEventListener("scroll", updateViewport);
+  }
+  if (window.ResizeObserver) {
+    new ResizeObserver(function () {
+      appEl.style.setProperty("--toolbar-height", toolbar.getBoundingClientRect().height + "px");
+      scheduleMapFit();
+    }).observe(toolbar);
+    new ResizeObserver(scheduleMapFit).observe(detailEl);
+    new ResizeObserver(scheduleMapFit).observe(document.getElementById("map-area"));
+  }
 
   // ---------- Init ----------
   renderChips();
   renderList();
   renderRefs();
+  syncResponsiveLayout();
   renderOverview();
 })();

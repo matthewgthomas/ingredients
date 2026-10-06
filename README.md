@@ -33,6 +33,14 @@ Map tiles need an internet connection; no API key is required.
 * **Toggle** between *Origin & growers*, *Origins*, and *Growers*.
 * **Show all origins** resets to the overview.
 
+On phones, search and map modes stay above the map. **Ingredients** opens a bottom panel;
+**Filters** switches it to the flavour families, and **Done** returns to the results.
+Selecting an ingredient shows a short origin summary. **Story, growers & sources** expands
+the card, while **Show less** returns space to the map. Close browsing with the close button,
+by tapping outside the panel, or with Escape. Nearby map origins offer a list to choose from.
+Landscape phones place the panels beside the map. The layout follows the available viewport,
+including space taken by the on-screen keyboard and the phone's safe areas.
+
 ## Project structure
 
 ```

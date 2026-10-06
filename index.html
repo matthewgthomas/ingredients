@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Ingredient Atlas — origins & where they grow</title>
   <meta name="description" content="An interactive map of where common food ingredients came from and where they are grown and produced today." />
 
@@ -19,35 +19,50 @@
 </head>
 <body>
   <div id="app">
+    <div id="mobile-toolbar"></div>
     <!-- Sidebar -->
-    <aside id="sidebar">
-      <header id="brand">
-        <h1>Ingredient&nbsp;Atlas</h1>
-        <p class="tagline">Where the world's ingredients came from &mdash; and where they grow now.</p>
-      </header>
+    <aside id="sidebar" aria-label="Ingredient browser">
+      <div id="explore-controls">
+        <header id="brand">
+          <h1>Ingredient&nbsp;Atlas</h1>
+          <p class="tagline">Where the world's ingredients came from &mdash; and where they grow now.</p>
+        </header>
 
-      <div class="controls">
-        <div class="search-wrap">
-          <input id="search" type="search" placeholder="Search ingredients…" autocomplete="off" />
-          <button id="clear-search" title="Clear" aria-label="Clear search">&times;</button>
-        </div>
+        <div class="controls">
+          <div class="search-wrap">
+            <input id="search" type="search" aria-label="Search ingredients" placeholder="Search ingredients…" autocomplete="off" enterkeyhint="search" />
+            <button id="clear-search" title="Clear" aria-label="Clear search">&times;</button>
+          </div>
 
-        <div class="mode-toggle" role="group" aria-label="What to show">
-          <button data-mode="both" class="active">Origin &amp; growers</button>
-          <button data-mode="origin">Origins</button>
-          <button data-mode="producers">Growers</button>
+          <div class="mode-toggle" role="group" aria-label="What to show">
+            <button data-mode="both" class="active" aria-pressed="true">Origin &amp; growers</button>
+            <button data-mode="origin" aria-pressed="false">Origins</button>
+            <button data-mode="producers" aria-pressed="false">Growers</button>
+          </div>
         </div>
+      </div>
+
+      <div id="browse-heading" class="sheet-heading">
+        <h2>Ingredients</h2>
+        <button id="sidebar-close" class="icon-button" aria-label="Close ingredient browser">&times;</button>
+      </div>
+
+      <div class="browse-tools">
+        <button id="filter-toggle" aria-expanded="false" aria-controls="category-filter">Filters</button>
+        <button id="clear-filters" class="link-btn">All categories</button>
+        <span id="list-status" role="status"></span>
       </div>
 
       <div id="category-filter" class="category-filter"></div>
 
-      <div id="list" class="ingredient-list" role="listbox" aria-label="Ingredients"></div>
+      <div id="list" class="ingredient-list" role="region" aria-label="Ingredients"></div>
 
       <footer id="side-footer">
-        <button id="reset-view" class="link-btn">Show all origins</button>
-        <p class="disclaimer">Origins are approximate and some are debated; production figures are indicative.
-          <button id="about-open" class="link-btn inline">About the data &amp; sources</button>
-        </p>
+        <div class="footer-actions">
+          <button id="reset-view" class="link-btn">Show all origins</button>
+          <button id="about-open" class="link-btn">About &amp; sources</button>
+        </div>
+        <p class="disclaimer">Origins are approximate and some are debated; production figures are indicative.</p>
       </footer>
     </aside>
 
@@ -55,34 +70,42 @@
     <main id="map-area">
       <div id="map"></div>
 
-      <div id="detail" class="detail hidden" aria-live="polite">
-        <button id="detail-close" aria-label="Close">&times;</button>
-        <span id="detail-cat" class="detail-cat">Category</span>
-        <h2 id="detail-name">Ingredient</h2>
-        <div class="detail-section">
+      <section id="detail" class="detail hidden" aria-labelledby="detail-name">
+        <div class="detail-heading">
+          <button id="detail-close" class="icon-button" aria-label="Close ingredient details">&times;</button>
+          <span id="detail-cat" class="detail-cat">Category</span>
+          <h2 id="detail-name" tabindex="-1">Ingredient</h2>
+        </div>
+        <div class="detail-section detail-summary">
           <h3><span class="dot origin-dot"></span> Origin</h3>
           <p id="detail-origin-place" class="detail-place"></p>
-          <p id="detail-origin-era" class="detail-era"></p>
-          <p id="detail-origin-note" class="detail-note"></p>
         </div>
-        <div class="detail-section">
-          <h3><span class="dot producer-dot"></span> Main growers today</h3>
-          <ul id="detail-producers" class="producer-list"></ul>
+        <button id="detail-expand" aria-expanded="false" aria-controls="detail-body">Story, growers &amp; sources <span aria-hidden="true">↑</span></button>
+        <div id="detail-body">
+          <div class="detail-section origin-story">
+            <p id="detail-origin-era" class="detail-era"></p>
+            <p id="detail-origin-note" class="detail-note"></p>
+          </div>
+          <div class="detail-section">
+            <h3><span class="dot producer-dot"></span> Main growers today</h3>
+            <ul id="detail-producers" class="producer-list"></ul>
+          </div>
+          <div class="detail-section detail-sources">
+            <h3>Sources</h3>
+            <ul id="detail-sources" class="source-list"></ul>
+          </div>
         </div>
-        <div class="detail-section detail-sources">
-          <h3>Sources</h3>
-          <ul id="detail-sources" class="source-list"></ul>
-        </div>
-      </div>
+      </section>
 
-      <button id="mobile-list-toggle" aria-label="Browse ingredients">☰ Ingredients</button>
+      <button id="mobile-list-toggle" aria-label="Browse ingredients" aria-expanded="false" aria-controls="sidebar"><span aria-hidden="true">☰</span> Ingredients</button>
+      <button id="mobile-panel-backdrop" hidden tabindex="-1" aria-label="Dismiss ingredient browser"></button>
     </main>
 
     <!-- About / sources modal -->
     <div id="about-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="about-title">
       <div class="modal-backdrop"></div>
       <div class="modal-card">
-        <button id="about-close" aria-label="Close">&times;</button>
+        <button id="about-close" class="icon-button" aria-label="Close about and sources">&times;</button>
         <h2 id="about-title">About the data &amp; sources</h2>
         <p>
           This atlas pairs each ingredient's <strong>origin</strong> — where its source
